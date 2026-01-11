@@ -1,0 +1,23 @@
+services:
+
+  accrual-postgres:
+    image: postgres:18.0-alpine
+    restart: always
+    shm_size: 128mb
+    ports:
+      - 5433:5432
+    environment:
+      POSTGRES_DB: accrual
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+  main-postgres:
+    image: postgres:18.0-alpine
+    restart: always
+    shm_size: 128mb
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_DB: main
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
