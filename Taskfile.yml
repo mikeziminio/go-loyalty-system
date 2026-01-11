@@ -1,0 +1,71 @@
+version: '3'
+
+env:
+  BIN: "{{.PWD}}/bin"
+
+tasks:
+
+  default:
+    cmds:
+      - "task -l"
+    silent: true
+
+  build:
+    desc: Build
+    cmds:
+      - "go build -o $BIN/gophermart ./cmd/gophermart"
+
+  run:
+    desc: Run server
+    cmds:
+      - $BIN/gophermart -a localhost:8080 -r localhost:8088
+
+  run-accrual:
+    desc: Run accrual server
+    cmds:
+      - ./cmd/accrual/accrual_darwin_amd64 -a localhost:8088 -d "postgresql://postgres:postgres@localhost:5433/accrual?sslmode=disable"
+
+  test:
+    desc: Run local unit tests
+    cmds:
+      - "go test -v -race ./..."
+
+  fmt:
+    desc: Format and fix imports
+    cmds:
+      - "gofmt -w ."
+      - "goimports -w -local \"github.com/mikeziminio/go-custom-metrics\" ."
+
+  build-yandex:
+    desc: Build yandex tests
+    cmds:
+      - git clone https://github.com/Yandex-Practicum/go-autotests.git ./tmp-go-autotests
+      - (cd ./tmp-go-autotests && go build -o ../bin/statictest ./cmd/statictest)
+      - (cd ./tmp-go-autotests && go build -o ../bin/random ./cmd/random)
+      - (cd ./tmp-go-autotests && go test -c -o ../bin/gophermarttest ./cmd/gophermarttest)
+      - rm -r -f ./tmp-go-autotests
+
+  test-yandex:
+    desc: Test with yandex tests
+    cmds:
+      - . ./test.sh
+
+  postgres-up:
+    desc: Docker compose up postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml up -d
+
+  postgres-ps:
+    desc: Docker compose status postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml ps
+
+  postgres-psql:
+    desc: Run psql inside postgres container
+    cmds:
+      - docker compose run -it postgres "psql" "postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable"
+
+  postgres-down:
+    desc: Docker compose down postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml down --remove-orphans
