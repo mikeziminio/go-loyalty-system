@@ -33,7 +33,7 @@ type orderInfoResponse struct {
 	Accrual int    `json:"accrual"`
 }
 
-func (c *Client) OrderInfo(ctx context.Context, id string) (*model.OrderInfo, error) {
+func (c *Client) OrderInfo(ctx context.Context, id string) (*model.Order, error) {
 	path := fmt.Sprintf("/api/orders/%s", id)
 	fullURL, err := url.JoinPath(c.baseURL, path)
 	if err != nil {
@@ -72,7 +72,7 @@ func (c *Client) OrderInfo(ctx context.Context, id string) (*model.OrderInfo, er
 	}
 
 	// todo: validate
-	return &model.OrderInfo{
+	return &model.Order{
 		Id:      oi.Id,
 		Status:  model.OrderStatus(oi.Status),
 		Accrual: oi.Accrual,

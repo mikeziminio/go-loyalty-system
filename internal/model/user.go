@@ -1,6 +1,9 @@
 package model
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 var (
 	ErrUserAlreadyExists = errors.New("user already exists")
@@ -14,4 +17,13 @@ type User struct {
 	Login    string
 	Password string
 	Token    string
+
+	Balance   float64
+	Withdrawn int
+}
+
+type Withdrawal struct {
+	OrderID     string    `json:"order"`
+	Sum         int       `json:"sum"`
+	ProcessedAt time.Time `json:"processed_at"`
 }

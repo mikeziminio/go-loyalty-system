@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type OrderStatus string
 
@@ -11,7 +14,11 @@ var (
 	StatusInvalid    OrderStatus = "INVALID"
 )
 
-type OrderInfo struct {
+var (
+	ErrInsufficientFunds = errors.New("insufficient funds")
+)
+
+type Order struct {
 	Id         string
 	Status     OrderStatus
 	Accrual    int
