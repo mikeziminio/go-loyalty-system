@@ -18,6 +18,8 @@ type UserRepository interface {
 	Register(login string, password string) (*model.User, error)
 	AuthByLogin(login string, password string) (*model.User, error)
 	AuthByToken(token string) (*model.User, error)
+	AddWithdrawal(userID int, orderID string, sum int) error
+	Withdrawals(userID int) ([]model.Withdrawal, error)
 }
 
 type API struct {
@@ -50,6 +52,13 @@ func (a *API) RegisterRouters() {
 
 	a.router.Post("/api/user/register", a.Register)
 	a.router.Post("/api/user/login", a.Login)
+
+	a.router.With(a.authMiddlewareHandler).
+		Get("/api/user/balance", a.Balance)
+	a.router.With(a.authMiddlewareHandler).
+		Get("/api/user/withdrawals", a.Withdrawals)
+	a.router.With(a.authMiddlewareHandler).
+		Post("/api/user/balance/withdraw", a.AddWithdrawal)
 }
 
 func (a *API) Run(ctx context.Context) {

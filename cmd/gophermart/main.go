@@ -2,13 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	stdlog "log"
 
-	"github.com/mikeziminio/go-loyalty-system/internal/clients/accrual"
 	"github.com/mikeziminio/go-loyalty-system/internal/config"
+	"github.com/mikeziminio/go-loyalty-system/internal/db"
 	"github.com/mikeziminio/go-loyalty-system/internal/log"
-	"go.uber.org/zap"
+	"github.com/mikeziminio/go-loyalty-system/internal/server"
 )
 
 func main() {
@@ -26,24 +25,24 @@ func main() {
 	}
 
 	// todo: прокидывать сюда базу данных
-	// ur := db.NewStorage()
+	ur := db.NewStorage()
 
-	accrualClient := accrual.NewClient(fmt.Sprintf("http://%s/", conf.AccrualAddress))
+	// accrualClient := accrual.NewClient(fmt.Sprintf("http://%s/", conf.AccrualAddress))
 
-	ids := []string{
-		"9278923470",
-		"12345678903",
-		"346436439",
-		"12345678900",
-		"346436488",
-	}
-	for i := range 5 {
-		oi, err := accrualClient.OrderInfo(ctx, ids[i])
-		log.Info("order info", zap.String("order", fmt.Sprintf("%+v", oi)), zap.Error(err))
-	}
+	// ids := []string{
+	// 	"9278923470",
+	// 	"12345678903",
+	// 	"346436439",
+	// 	"12345678900",
+	// 	"346436488",
+	// }
+	// for i := range 5 {
+	// 	oi, err := accrualClient.OrderInfo(ctx, ids[i])
+	// 	log.Info("order info", zap.String("order", fmt.Sprintf("%+v", oi)), zap.Error(err))
+	// }
 
-	// a := server.NewAPI(conf.Address, ur, log)
+	a := server.NewAPI(conf.Address, ur, log)
 
-	// a.RegisterRouters()
-	// a.Run(ctx)
+	a.RegisterRouters()
+	a.Run(ctx)
 }
