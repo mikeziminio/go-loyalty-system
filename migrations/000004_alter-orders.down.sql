@@ -1,0 +1,2 @@
+ALTER TABLE orders
+ALTER COLUMN accrual DROP DEFAULT;

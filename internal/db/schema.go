@@ -18,3 +18,11 @@ type withdrawal struct {
 	UserID      int       `db:"user_id"`
 	ProcessedAt time.Time `db:"processed_at"`
 }
+
+type order struct {
+	ID        string    `db:"id"`
+	Status    string    `db:"status"`
+	Accrual   int       `db:"accrual"`
+	UserID    int       `db:"user_id"`
+	UpdatedAt time.Time `db:"updated_at"`
+}

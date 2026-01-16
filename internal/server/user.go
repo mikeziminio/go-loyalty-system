@@ -372,4 +372,7 @@ func (a *API) AddOrder(w http.ResponseWriter, r *http.Request) {
 		a.standardError(w, "unexpected error", err, http.StatusInternalServerError)
 		return
 	}
+
+	// в отдельной горутине - обновить поля заказа из accurel сервиса
+	// сохранить заказ
 }
