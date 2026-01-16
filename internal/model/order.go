@@ -19,7 +19,7 @@ var (
 )
 
 type Order struct {
-	Id         string
+	ID         string
 	Status     OrderStatus
 	Accrual    int
 	UploadedAt time.Time

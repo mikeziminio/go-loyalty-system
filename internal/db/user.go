@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5"
+
 	"github.com/mikeziminio/go-loyalty-system/internal/model"
 )
 
@@ -108,16 +110,32 @@ func (s *Storage) Withdrawals(userID int) ([]model.Withdrawal, error) {
 	return ws, nil
 }
 
-func (s *Storage) Orders(userID int) ([]model.Withdrawal, error) {
-	aws, ok := s.withdrawalsByUserID.Load(userID)
+func (s *Storage) AddOrder(userID int, orderID string) error {
+	var os []model.Order
+	aos, ok := s.ordersByUserID.Load(userID)
+	if ok {
+		os = aos.([]model.Order)
+	}
+	os = append(os, model.Order{
+		ID:         orderID,
+		Status:     "",
+		Accrual:    0,
+		UploadedAt: time.Now(),
+	})
+	s.ordersByUserID.Store(userID, os)
+	return nil
+}
+
+func (s *Storage) Orders(userID int) ([]model.Order, error) {
+	aos, ok := s.ordersByUserID.Load(userID)
 	if !ok {
 		return nil, nil
 	}
-	ws, ok := aws.([]model.Withdrawal)
+	os, ok := aos.([]model.Order)
 	if !ok {
 		return nil, fmt.Errorf("failed to load value from sync map")
 	}
-	ws = slices.Clone(ws)
-	slices.Reverse(ws)
-	return ws, nil
+	os = slices.Clone(os)
+	slices.Reverse(os)
+	return os, nil
 }

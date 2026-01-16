@@ -73,7 +73,7 @@ func (c *Client) OrderInfo(ctx context.Context, id string) (*model.Order, error)
 
 	// todo: validate
 	return &model.Order{
-		Id:      oi.Id,
+		ID:      oi.Id,
 		Status:  model.OrderStatus(oi.Status),
 		Accrual: oi.Accrual,
 	}, nil
