@@ -24,6 +24,8 @@ import (
 // 409 — логин уже занят;
 // 500 — внутренняя ошибка сервера.
 func (a *API) Register(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -47,7 +49,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := a.userRepository.Register(data.Login, data.Password)
+	u, err := a.userRepository.Register(ctx, data.Login, data.Password)
 	if err != nil {
 		if errors.Is(err, model.ErrUserAlreadyExists) {
 			a.customError(w, fmt.Sprintf("user %s already exists", data.Login), err, http.StatusConflict)
@@ -71,6 +73,8 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 // 401 — неверная пара логин/пароль;
 // 500 — внутренняя ошибка сервера.
 func (a *API) Login(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
@@ -94,7 +98,7 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := a.userRepository.AuthByLogin(data.Login, data.Password)
+	u, err := a.userRepository.AuthByLogin(ctx, data.Login, data.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrUserNotFound):
@@ -107,7 +111,7 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Authorization", fmt.Sprintf("Bearer: %s", u.Token))
+	w.Header().Set("Authorization", fmt.Sprintf("Bearer %s", u.Token))
 }
 
 func (a *API) userFromContext(w http.ResponseWriter, r *http.Request) (*model.User, bool) {
@@ -169,11 +173,13 @@ func (a *API) Balance(w http.ResponseWriter, r *http.Request) {
 // 401 — пользователь не авторизован;
 // 500 — внутренняя ошибка сервера.
 func (a *API) Withdrawals(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	u, ok := a.userFromContext(w, r)
 	if !ok {
 		return
 	}
-	ws, err := a.userRepository.Withdrawals(u.ID)
+	ws, err := a.userRepository.Withdrawals(ctx, u.ID)
 	if err != nil {
 		a.standardError(w, "failed to fetch withdrawals", err, http.StatusInternalServerError)
 		return
@@ -223,6 +229,8 @@ func (a *API) Withdrawals(w http.ResponseWriter, r *http.Request) {
 // 422 — неверный номер заказа;
 // 500 — внутренняя ошибка сервера.
 func (a *API) AddWithdrawal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	u, ok := a.userFromContext(w, r)
 	if !ok {
 		return
@@ -252,7 +260,7 @@ func (a *API) AddWithdrawal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = a.userRepository.AddWithdrawal(u.ID, data.OrderID, data.Sum)
+	err = a.userRepository.AddWithdrawal(ctx, u.ID, data.OrderID, data.Sum)
 	if err != nil {
 		if errors.Is(err, model.ErrInsufficientFunds) {
 			a.standardError(w, "insufficient funds", err, http.StatusPaymentRequired)
@@ -263,7 +271,105 @@ func (a *API) AddWithdrawal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-/*
-POST /api/user/orders — загрузка пользователем номера заказа для расчёта;
-GET /api/user/orders — получение списка загруженных пользователем номеров заказов, статусов их обработки и информации о начислениях;
-*/
+// Orders - получение списка загруженных пользователем номеров заказов,
+// статусов их обработки и информации о начислениях
+//
+// GET /api/user/orders
+// Хендлер доступен только авторизованному пользователю.
+// Номера заказа в выдаче должны быть отсортированы
+// по времени загрузки от самых новых к самым старым.
+// Формат даты — RFC3339.
+//
+// Доступные статусы обработки расчётов:
+// NEW — заказ загружен в систему, но не попал в обработку;
+// PROCESSING — вознаграждение за заказ рассчитывается;
+// INVALID — система расчёта вознаграждений отказала в расчёте;
+// PROCESSED — данные по заказу проверены и информация о расчёте успешно получена.
+//
+// Коды ответов:
+// 200 — успешная обработка запроса;
+// 204 — нет данных для ответа;
+// 401 — пользователь не авторизован;
+// 500 — внутренняя ошибка сервера.
+func (a *API) Orders(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	u, ok := a.userFromContext(w, r)
+	if !ok {
+		return
+	}
+	os, err := a.userRepository.Orders(ctx, u.ID)
+	if err != nil {
+		a.standardError(w, "failed to fetch orders", err, http.StatusInternalServerError)
+		return
+	}
+	if len(os) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	type resDataItem struct {
+		OrderID    string    `json:"number"`
+		Status     string    `json:"status"`
+		Accrual    int       `json:"accrual,omitempty"`
+		UploadedAt time.Time `json:"uploaded_at"`
+	}
+
+	var data []resDataItem
+
+	for _, o := range os {
+		data = append(data, resDataItem{
+			OrderID:    o.ID,
+			Status:     string(o.Status),
+			Accrual:    o.Accrual,
+			UploadedAt: o.UploadedAt,
+		})
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		a.standardError(w, "failed to json marshal", err, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+}
+
+// AddOrder - Загрузка номера заказа для расчёта
+//
+// POST /api/user/orders
+// Хендлер доступен только аутентифицированным пользователям.
+// Номером заказа является последовательность цифр произвольной длины.
+// Номер заказа может быть проверен на корректность ввода с помощью алгоритма Луна.
+//
+// Коды ответов:
+// 200 — номер заказа уже был загружен этим пользователем;
+// 202 — новый номер заказа принят в обработку;
+// 400 — неверный формат запроса;
+// 401 — пользователь не аутентифицирован;
+// 409 — номер заказа уже был загружен другим пользователем;
+// 422 — неверный формат номера заказа;
+// 500 — внутренняя ошибка сервера.
+func (a *API) AddOrder(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	u, ok := a.userFromContext(w, r)
+	if !ok {
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		a.standardError(w, "failed to read body", err, http.StatusInternalServerError)
+		return
+	}
+
+	orderID := string(body)
+
+	err = a.userRepository.AddOrder(ctx, u.ID, orderID)
+	if err != nil {
+		a.standardError(w, "unexpected error", err, http.StatusInternalServerError)
+		return
+	}
+}

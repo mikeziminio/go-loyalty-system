@@ -63,9 +63,24 @@ tasks:
   postgres-psql:
     desc: Run psql inside postgres container
     cmds:
-      - docker compose run -it postgres "psql" "postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable"
+      - docker compose -f docker-compose-postgres.yml run -it main-postgres "psql" "postgres://postgres:postgres@main-postgres:5432/main?sslmode=disable"
 
   postgres-down:
     desc: Docker compose down postgres container
     cmds:
       - docker compose -f docker-compose-postgres.yml down --remove-orphans
+
+  migrate-prepare:
+    desc: Install golang-migrate
+    cmds:
+      - "GOBIN=$BIN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
+
+  migrate-create:
+    desc: Create migration, specify name with -- name
+    cmds:
+      - "$BIN/migrate create -ext sql -dir ./migrations -seq {{.CLI_ARGS}}"
+
+  migrate-up:
+    desc: Run migrate up
+    cmds:
+      - "$BIN/migrate -database 'postgres://postgres:postgres@localhost:5432/main?sslmode=disable' -path ./migrations up"

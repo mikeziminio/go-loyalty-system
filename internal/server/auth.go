@@ -12,6 +12,8 @@ var userContextKey = "user"
 
 func (a *API) authMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
 		auth := r.Header.Get("Authorization")
 		token, ok := strings.CutPrefix(auth, "Bearer ")
 		if !ok {
@@ -19,13 +21,13 @@ func (a *API) authMiddlewareHandler(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		user, err := a.userRepository.AuthByToken(token)
+		user, err := a.userRepository.AuthByToken(ctx, token)
 		if err != nil {
 			a.logger.Error("failed to auth by token", zap.Error(err))
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		ctx := context.WithValue(r.Context(), userContextKey, user)
+		ctx = context.WithValue(ctx, userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
