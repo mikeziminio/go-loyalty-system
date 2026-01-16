@@ -198,10 +198,10 @@ func (db *DB) AddWithdrawal(ctx context.Context, userID int, orderID string, sum
 		`
 	t, err = db.pool.Exec(ctx, q, sum, orderID, userID, time.Now())
 	if err != nil {
-		return fmt.Errorf("failed to update user: %w", err)
+		return fmt.Errorf("failed to insert user: %w", err)
 	}
 	if !t.Insert() || t.RowsAffected() != 1 {
-		return fmt.Errorf("failed to update user: %s", t.String())
+		return fmt.Errorf("failed to insert user: %s", t.String())
 	}
 	return nil
 }
@@ -210,7 +210,7 @@ func (db *DB) Withdrawals(ctx context.Context, userID int) ([]model.Withdrawal, 
 	q := `
 		SELECT * FROM withdrawals
 		WHERE user_id = $1
-		ORDER BY processed DESC
+		ORDER BY processed_at DESC
 		`
 	rows, err := db.pool.Query(ctx, q, userID)
 	if err != nil {
@@ -229,13 +229,47 @@ func (db *DB) Withdrawals(ctx context.Context, userID int) ([]model.Withdrawal, 
 			ProcessedAt: w.ProcessedAt,
 		})
 	}
-	return nil, nil
+	return withdrawals, nil
 }
 
 func (db *DB) AddOrder(ctx context.Context, userID int, orderID string) error {
+	q := `
+		INSERT INTO orders(id, status, user_id, updated_at)
+		VALUES ($1, $2, $3, $4)
+		`
+	t, err := db.pool.Exec(ctx, q, orderID, "NEW", userID, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to insert order: %w", err)
+	}
+	if !t.Insert() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to insert order: %s", t.String())
+	}
 	return nil
 }
 
 func (db *DB) Orders(ctx context.Context, userID int) ([]model.Order, error) {
-	return nil, nil
+	q := `
+		SELECT * FROM orders
+		WHERE user_id = $1
+		ORDER BY updated_at DESC
+		`
+	rows, err := db.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	os, err := pgx.CollectRows(rows, pgx.RowToStructByName[order])
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect one row: %w", err)
+	}
+
+	var orders []model.Order
+	for _, o := range os {
+		orders = append(orders, model.Order{
+			ID:         o.ID,
+			Status:     model.OrderStatus(o.Status),
+			Accrual:    o.Accrual,
+			UploadedAt: o.UpdatedAt,
+		})
+	}
+	return orders, nil
 }

@@ -1,11 +1,3 @@
-
-
-POST /api/user/orders — загрузка пользователем номера заказа для расчёта;
-GET /api/user/orders — получение списка загруженных пользователем номеров заказов, статусов их обработки и информации о начислениях;
-GET /api/user/balance — получение текущего баланса счёта баллов лояльности пользователя;
-POST /api/user/balance/withdraw — запрос на списание баллов с накопительного счёта в счёт оплаты нового заказа;
-GET /api/user/withdrawals — получение информации о выводе средств с накопительного счёта пользователем.
-
 # регистрация пользователя
 curl -X POST -i \
 'http://localhost:8080/api/user/register' \
@@ -24,8 +16,37 @@ curl -X POST -i \
 }' \
 | ijq
 
-
+# получение текущего баланса счёта баллов лояльности пользователя
 curl -X GET -i \
 'http://localhost:8080/api/user/balance' \
+-H 'Authorization: Bearer d97d7c2e-f2e6-11f0-9b2c-96f332c237f9' \
+| ijq
+
+# запрос на списание баллов с накопительного счёта в счёт оплаты нового заказа;
+curl -X POST -i \
+'http://localhost:8080/api/user/balance/withdraw' \
+-H 'Authorization: Bearer d97d7c2e-f2e6-11f0-9b2c-96f332c237f9' \
+-d '{
+	"order": "2377225624",
+    "sum": 5
+}' \
+| ijq
+
+# получение информации о выводе средств с накопительного счёта пользователем.
+curl -X GET -i \
+'http://localhost:8080/api/user/withdrawals' \
+-H 'Authorization: Bearer d97d7c2e-f2e6-11f0-9b2c-96f332c237f9' \
+| ijq
+
+# загрузка пользователем номера заказа для расчёта;
+curl -X POST -i \
+'http://localhost:8080/api/user/orders' \
+-H 'Authorization: Bearer d97d7c2e-f2e6-11f0-9b2c-96f332c237f9' \
+-d '12345888' \
+| ijq
+
+# получение списка загруженных пользователем номеров заказов, статусов их обработки и информации о начислениях;
+curl -X GET -i \
+'http://localhost:8080/api/user/orders' \
 -H 'Authorization: Bearer d97d7c2e-f2e6-11f0-9b2c-96f332c237f9' \
 | ijq
