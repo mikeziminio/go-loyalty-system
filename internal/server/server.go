@@ -18,20 +18,28 @@ type UserRepository interface {
 	Register(ctx context.Context, login string, password string) (*model.User, error)
 	AuthByLogin(ctx context.Context, login string, password string) (*model.User, error)
 	AuthByToken(ctx context.Context, token string) (*model.User, error)
-	AddWithdrawal(ctx context.Context, userID int, orderID string, sum int) error
+	AddWithdrawal(ctx context.Context, userID int, orderID string, sum float64) error
 	Withdrawals(ctx context.Context, userID int) ([]model.Withdrawal, error)
 	AddOrder(ctx context.Context, userID int, orderID string) error
 	Orders(ctx context.Context, userID int) ([]model.Order, error)
 }
 
-type API struct {
-	logger         *zap.Logger
-	userRepository UserRepository
-	httpServer     *http.Server
-	router         *chi.Mux
+type OrderFetcher interface {
+	Order(ctx context.Context, orderID string) (*model.Order, error)
 }
 
-func NewAPI(address string, userRepository UserRepository, logger *zap.Logger) *API {
+type API struct {
+	logger         *zap.Logger
+	httpServer     *http.Server
+	router         *chi.Mux
+	userRepository UserRepository
+	orderFetcher   OrderFetcher
+}
+
+func NewAPI(
+	address string, userRepository UserRepository,
+	orderFetcher OrderFetcher, logger *zap.Logger,
+) *API {
 	r := chi.NewRouter()
 
 	httpServer := &http.Server{
@@ -43,9 +51,10 @@ func NewAPI(address string, userRepository UserRepository, logger *zap.Logger) *
 
 	return &API{
 		logger:         logger,
-		userRepository: userRepository,
-		router:         r,
 		httpServer:     httpServer,
+		router:         r,
+		userRepository: userRepository,
+		orderFetcher:   orderFetcher,
 	}
 }
 
