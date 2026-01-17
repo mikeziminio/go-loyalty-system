@@ -2,13 +2,20 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"runtime"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 
 	"github.com/mikeziminio/go-loyalty-system/internal/model"
@@ -30,10 +37,45 @@ func NewDB(ctx context.Context, connURL string, minConns int32, maxConns int32, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
+
+	stddb := stdlib.OpenDBFromPool(pool)
+	defer stddb.Close()
+	err = migrateUp(stddb)
+	if err != nil {
+		return nil, fmt.Errorf("failed to migrate up: %w", err)
+	}
+
 	return &DB{
 		pool: pool,
 		log:  log,
 	}, nil
+}
+
+func migrateUp(stddb *sql.DB) error {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return fmt.Errorf("failed to get current filename")
+	}
+	projectRoot := filepath.Join(filepath.Dir(filename), "..", "..")
+	migrationsPath := "file://" + filepath.Join(projectRoot, "migrations")
+
+	driver, err := postgres.WithInstance(stddb, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create driver: %w", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		migrationsPath, "postgres", driver,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", err)
+	}
+
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("failed to migrate up: %w", err)
+	}
+	return nil
 }
 
 func (db *DB) Begin(ctx context.Context) (pgx.Tx, error) {
