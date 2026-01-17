@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mikeziminio/go-loyalty-system/internal/model"
+	"go.uber.org/zap"
 )
 
 // Register регистрация пользователя
@@ -155,7 +156,7 @@ func (a *API) Balance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // Withdrawals - получение информации о выводе средств
@@ -211,7 +212,7 @@ func (a *API) Withdrawals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(b)
+	_, _ = w.Write(b)
 }
 
 // AddWithdrawal - запрос на списание баллов
@@ -332,7 +333,7 @@ func (a *API) Orders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(b)
+	_, _ = w.Write(b)
 }
 
 // AddOrder - Загрузка номера заказа для расчёта
@@ -366,6 +367,10 @@ func (a *API) AddOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orderID := string(body)
+	if !model.IsValidOrderID(orderID) {
+		a.customError(w, "invalid order id", nil, http.StatusUnprocessableEntity)
+		return
+	}
 
 	err = a.userRepository.AddOrder(ctx, u.ID, orderID)
 	if err != nil {
@@ -381,4 +386,17 @@ func (a *API) AddOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+
+	// todo: выполнять в отдельной горутине
+
+	procOrder, err := a.orderFetcher.Order(ctx, orderID)
+	if err != nil {
+		a.logger.Error("failed to fetch order", zap.Error(err))
+		return
+	}
+	err = a.userRepository.ProcessOrder(ctx, u.ID, orderID, procOrder.Accrual, string(procOrder.Status))
+	if err != nil {
+		a.logger.Error("failed to process order", zap.Error(err))
+		return
+	}
 }

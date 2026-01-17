@@ -3,6 +3,8 @@ package model
 import (
 	"errors"
 	"time"
+
+	"github.com/ShiraazMoollatjie/goluhn"
 )
 
 type OrderStatus string
@@ -25,4 +27,9 @@ type Order struct {
 	Status     OrderStatus
 	Accrual    float64
 	UploadedAt time.Time
+}
+
+func IsValidOrderID(id string) bool {
+	err := goluhn.Validate(id)
+	return err == nil
 }

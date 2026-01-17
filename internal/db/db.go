@@ -19,13 +19,13 @@ type DB struct {
 	log  *zap.Logger
 }
 
-func NewDB(ctx context.Context, connURL string, minConns int, maxConns int, log *zap.Logger) (*DB, error) {
+func NewDB(ctx context.Context, connURL string, minConns int32, maxConns int32, log *zap.Logger) (*DB, error) {
 	poolConf, err := pgxpool.ParseConfig(connURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
-	poolConf.MinConns = int32(minConns)
-	poolConf.MaxConns = int32(maxConns)
+	poolConf.MinConns = minConns
+	poolConf.MaxConns = maxConns
 	pool, err := pgxpool.NewWithConfig(ctx, poolConf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
@@ -260,6 +260,41 @@ func (db *DB) AddOrder(ctx context.Context, userID int, orderID string) error {
 	if !t.Insert() || t.RowsAffected() != 1 {
 		return fmt.Errorf("failed to insert order: %s", t.String())
 	}
+	return nil
+}
+
+// Обновляет заказ и увеличивает у пользователя баланс
+func (db *DB) ProcessOrder(
+	ctx context.Context, userID int, orderID string,
+	accrual float64, status string,
+) error {
+	// todo: объединить в транзакцию
+	q := `
+		UPDATE orders
+		SET status = $1, accrual = $2, updated_at = $3
+		WHERE id = $4
+		`
+	t, err := db.pool.Exec(ctx, q, status, accrual, time.Now(), orderID)
+	if err != nil {
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+	if !t.Update() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to update order: %s", t.String())
+	}
+
+	q = `
+		UPDATE users
+		SET balance = balance + $1
+		WHERE id = $2
+		`
+	t, err = db.pool.Exec(ctx, q, accrual, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	if !t.Update() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to update user: %s", t.String())
+	}
+
 	return nil
 }
 

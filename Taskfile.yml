@@ -18,17 +18,31 @@ tasks:
   run:
     desc: Run server
     cmds:
-      - $BIN/gophermart -a localhost:8080 -r localhost:8088
+      - $BIN/gophermart -a "localhost:8080" -r "http://localhost:8088"
 
   run-accrual:
     desc: Run accrual server
     cmds:
-      - ./cmd/accrual/accrual_darwin_amd64 -a localhost:8088 -d "postgresql://postgres:postgres@localhost:5433/accrual?sslmode=disable"
+      - ./cmd/accrual/accrual_darwin_amd64 -a "localhost:8088" -d "postgresql://postgres:postgres@localhost:5433/accrual?sslmode=disable"
 
   test:
     desc: Run local unit tests
     cmds:
       - "go test -v -race ./..."
+
+  lint-prepare:
+    desc: Install golangci-lint and nilaway, verify golangci-lint config
+    cmds:
+      - "GOBIN=$BIN go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0"
+      - "GOBIN=$BIN go install go.uber.org/nilaway/cmd/nilaway@latest"
+      - "$BIN/golangci-lint cache clean"
+      - "$BIN/golangci-lint config verify"
+
+  lint:
+    desc: Run linters
+    cmds:
+      - "$BIN/golangci-lint run -c .golangci.yml"
+      - "$BIN/nilaway -pretty-print=true ./..."
 
   fmt:
     desc: Format and fix imports
@@ -60,10 +74,15 @@ tasks:
     cmds:
       - docker compose -f docker-compose-postgres.yml ps
 
-  postgres-psql:
-    desc: Run psql inside postgres container
+  psql:
+    desc: Run psql inside main-postgres container
     cmds:
       - docker compose -f docker-compose-postgres.yml run -it main-postgres "psql" "postgres://postgres:postgres@main-postgres:5432/main?sslmode=disable"
+
+  psql-accrual:
+    desc: Run psql inside accrual-postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml run -it accrual-postgres "psql" "postgres://postgres:postgres@accrual-postgres:5432/accrual?sslmode=disable"
 
   postgres-down:
     desc: Docker compose down postgres container

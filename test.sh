@@ -1,7 +1,7 @@
 set -ex
 
-# go vet -vettool=./bin/statictest ./...
-# echo "Verified by linter"
+go vet -vettool=./bin/statictest ./...
+echo "Verified by linter"
 
 ./bin/gophermarttest \
     -test.v -test.run=^TestGophermart$ \
@@ -11,5 +11,5 @@ set -ex
     -gophermart-database-uri="postgresql://postgres:postgres@localhost:5432/main?sslmode=disable" \
     -accrual-binary-path=cmd/accrual/accrual_darwin_amd64 \
     -accrual-host=localhost \
-    -accrual-port=$(./bin/random unused-port) \
+    -accrual-port=8088 \
     -accrual-database-uri="postgresql://postgres:postgres@localhost:5433/accrual?sslmode=disable"

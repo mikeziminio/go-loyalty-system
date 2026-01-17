@@ -2,6 +2,10 @@ package db
 
 import "time"
 
+// todo:
+// float64 to decimal
+// https://github.com/shopspring/decimal
+
 type user struct {
 	ID        int     `db:"id"`
 	Login     string  `db:"login"`

@@ -17,9 +17,9 @@ type Client struct {
 	baseURL    string
 }
 
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL string, timeout time.Duration) *Client {
 	httpClient := http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: timeout,
 	}
 	return &Client{
 		httpClient: &httpClient,
@@ -28,9 +28,9 @@ func NewClient(baseURL string) *Client {
 }
 
 type orderInfoResponse struct {
-	Id      string  `json:"order"`
+	ID      string  `json:"order"`
 	Status  string  `json:"status"`
-	Accrual float64 `json:"accrual"`
+	Accrual float64 `json:"accrual,omitempty"`
 }
 
 func (c *Client) Order(ctx context.Context, id string) (*model.Order, error) {
@@ -49,6 +49,11 @@ func (c *Client) Order(ctx context.Context, id string) (*model.Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch order info: %w", err)
 	}
+	// nilaway ругается в этом месте,
+	// считает что возможны ситуации когда err == nil и res == nil
+	if res == nil {
+		return nil, fmt.Errorf("failed to fetch order info: nil response")
+	}
 
 	if res.StatusCode != http.StatusOK {
 		switch res.StatusCode {
@@ -64,6 +69,9 @@ func (c *Client) Order(ctx context.Context, id string) (*model.Order, error) {
 	body := res.Body
 	defer body.Close()
 	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read body: %w", err)
+	}
 
 	var oi orderInfoResponse
 	err = json.Unmarshal(data, &oi)
@@ -73,7 +81,7 @@ func (c *Client) Order(ctx context.Context, id string) (*model.Order, error) {
 
 	// todo: validate
 	return &model.Order{
-		ID:      oi.Id,
+		ID:      oi.ID,
 		Status:  model.OrderStatus(oi.Status),
 		Accrual: oi.Accrual,
 	}, nil

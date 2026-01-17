@@ -42,6 +42,7 @@ curl -X GET -i \
 curl -X POST -i \
 'http://localhost:8080/api/user/orders' \
 -H 'Authorization: Bearer d97d7c2e-f2e6-11f0-9b2c-96f332c237f9' \
+-H 'Content-Type: text/plain'
 -d '12345888' \
 | ijq
 
@@ -50,3 +51,36 @@ curl -X GET -i \
 'http://localhost:8080/api/user/orders' \
 -H 'Authorization: Bearer f9222256-f3a3-11f0-a16a-96f332c237f9' \
 | ijq
+
+#
+# Запросы во внешнюю систему расчета баллов
+#
+
+# получение расчета для заказа из внешней системы
+curl -X GET -i \
+'http://localhost:8088/api/orders/49927398716' \
+| ijq
+
+# регистрация нового совершённого заказа
+curl -X POST -i \
+'http://localhost:8088/api/orders' \
+-H 'Content-Type: application/json' \
+-d '{
+    "order": "49927398716",
+    "goods": [
+        {
+            "description": "Чайник Bork",
+            "price": 7000
+        }
+    ]
+}'
+
+# регистрация информации о новой механике вознаграждения за товар
+curl -X POST -i \
+'http://localhost:8088/api/goods' \
+-H 'Content-Type: application/json' \
+-d '{
+    "match": "Bork",
+    "reward": 10,
+    "reward_type": "%"
+}'

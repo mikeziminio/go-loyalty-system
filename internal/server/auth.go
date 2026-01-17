@@ -8,7 +8,9 @@ import (
 	"go.uber.org/zap"
 )
 
-var userContextKey = "user"
+type contextKey string
+
+var userContextKey contextKey = "user"
 
 func (a *API) authMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
