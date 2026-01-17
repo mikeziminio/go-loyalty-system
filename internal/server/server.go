@@ -81,11 +81,24 @@ func (a *API) RegisterRouters() {
 }
 
 func (a *API) Run(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	go func() {
-		_ = a.httpServer.ListenAndServe()
+		a.logger.Info("start listen",
+			zap.String("addr", a.httpServer.Addr),
+		)
+		err := a.httpServer.ListenAndServe()
+		if err != nil {
+			a.logger.Error("stop listen",
+				zap.String("addr", a.httpServer.Addr),
+				zap.Error(err),
+			)
+			cancel()
+		}
 	}()
 
-	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel = signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	<-ctx.Done()
 }

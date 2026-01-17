@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 
 	"github.com/mikeziminio/go-loyalty-system/internal/model"
@@ -38,9 +38,7 @@ func NewDB(ctx context.Context, connURL string, minConns int32, maxConns int32, 
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	stddb := stdlib.OpenDBFromPool(pool)
-	defer stddb.Close()
-	err = migrateUp(stddb)
+	err = migrateUp(connURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to migrate up: %w", err)
 	}
@@ -51,7 +49,14 @@ func NewDB(ctx context.Context, connURL string, minConns int32, maxConns int32, 
 	}, nil
 }
 
-func migrateUp(stddb *sql.DB) error {
+func migrateUp(connURL string) error {
+	// Для миграций - отдельное подключение
+	stddb, err := sql.Open("pgx", connURL)
+	if err != nil {
+		return fmt.Errorf("failed to create connection pool for migration: %w", err)
+	}
+	defer stddb.Close()
+
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		return fmt.Errorf("failed to get current filename")
