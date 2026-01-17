@@ -72,7 +72,7 @@ tasks:
   postgres-down:
     desc: Docker compose up postgres container
     cmds:
-      - docker compose -f docker-compose-postgres.yml down
+      - docker compose -f docker-compose-postgres.yml down --remove-orphans
 
   postgres-ps:
     desc: Docker compose status postgres container
@@ -88,11 +88,6 @@ tasks:
     desc: Run psql inside accrual-postgres container
     cmds:
       - docker compose -f docker-compose-postgres.yml run -it accrual-postgres "psql" "postgres://postgres:postgres@accrual-postgres:5432/accrual?sslmode=disable"
-
-  postgres-down:
-    desc: Docker compose down postgres container
-    cmds:
-      - docker compose -f docker-compose-postgres.yml down --remove-orphans
 
   migrate-prepare:
     desc: Install golang-migrate
