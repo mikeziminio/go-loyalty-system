@@ -143,7 +143,7 @@ func (a *API) Balance(w http.ResponseWriter, r *http.Request) {
 
 	type resData struct {
 		Current   float64 `json:"current"`
-		Withdrawn int     `json:"withdrawn"`
+		Withdrawn float64 `json:"withdrawn"`
 	}
 
 	data, err := json.Marshal(resData{
@@ -191,7 +191,7 @@ func (a *API) Withdrawals(w http.ResponseWriter, r *http.Request) {
 
 	type resDataItem struct {
 		Order       string    `json:"order"`
-		Sum         int       `json:"sum"`
+		Sum         float64   `json:"sum"`
 		ProcessedAt time.Time `json:"processed_at"`
 	}
 
@@ -245,8 +245,8 @@ func (a *API) AddWithdrawal(w http.ResponseWriter, r *http.Request) {
 
 	// todo - вынести здесь и в аналогичных местах - в отдельный тип
 	var data struct {
-		OrderID string `json:"order"`
-		Sum     int    `json:"sum"`
+		OrderID string  `json:"order"`
+		Sum     float64 `json:"sum"`
 	}
 
 	err = json.Unmarshal(body, &data)
@@ -311,7 +311,7 @@ func (a *API) Orders(w http.ResponseWriter, r *http.Request) {
 	type resDataItem struct {
 		OrderID    string    `json:"number"`
 		Status     string    `json:"status"`
-		Accrual    int       `json:"accrual,omitempty"`
+		Accrual    float64   `json:"accrual,omitempty"`
 		UploadedAt time.Time `json:"uploaded_at"`
 	}
 
@@ -369,10 +369,16 @@ func (a *API) AddOrder(w http.ResponseWriter, r *http.Request) {
 
 	err = a.userRepository.AddOrder(ctx, u.ID, orderID)
 	if err != nil {
+		if errors.Is(err, model.ErrOrderAlreadyLoaded) {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if errors.Is(err, model.ErrOrderLoadedByAnotherUser) {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
 		a.standardError(w, "unexpected error", err, http.StatusInternalServerError)
 		return
 	}
-
-	// в отдельной горутине - обновить поля заказа из accurel сервиса
-	// сохранить заказ
+	w.WriteHeader(http.StatusAccepted)
 }

@@ -19,11 +19,11 @@ type User struct {
 	Token    string
 
 	Balance   float64
-	Withdrawn int
+	Withdrawn float64
 }
 
 type Withdrawal struct {
 	OrderID     string    `json:"order"`
-	Sum         int       `json:"sum"`
+	Sum         float64       `json:"sum"`
 	ProcessedAt time.Time `json:"processed_at"`
 }

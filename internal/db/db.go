@@ -170,21 +170,21 @@ func (db *DB) AuthByToken(ctx context.Context, token string) (*model.User, error
 	return u, nil
 }
 
-func (db *DB) AddWithdrawal(ctx context.Context, userID int, orderID string, sum int) error {
+func (db *DB) AddWithdrawal(ctx context.Context, userID int, orderID string, sum float64) error {
 	u, err := db.fetchUserByID(ctx, userID)
 	if err != nil {
 		return nil
 	}
-	if u.Balance < float64(sum) {
+	if u.Balance < sum {
 		return model.ErrInsufficientFunds
 	}
 
 	q := `
 		UPDATE users
-		SET balance = balance - $1, withdrawn = withdrawn + $2
-		WHERE id = $3
+		SET balance = balance - $1, withdrawn = withdrawn + $1
+		WHERE id = $2
 		`
-	t, err := db.pool.Exec(ctx, q, float64(sum), sum, userID)
+	t, err := db.pool.Exec(ctx, q, sum, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
@@ -233,7 +233,23 @@ func (db *DB) Withdrawals(ctx context.Context, userID int) ([]model.Withdrawal, 
 }
 
 func (db *DB) AddOrder(ctx context.Context, userID int, orderID string) error {
-	q := `
+	q := `SELECT * FROM orders WHERE id = $1`
+	rows, err := db.pool.Query(ctx, q, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to do query: %w", err)
+	}
+	o, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[order])
+	if !errors.Is(err, pgx.ErrNoRows) {
+		if err != nil {
+			return fmt.Errorf("failed to collect one row: %w", err)
+		}
+		if o.UserID == userID {
+			return model.ErrOrderAlreadyLoaded
+		}
+		return model.ErrOrderLoadedByAnotherUser
+	}
+
+	q = `
 		INSERT INTO orders(id, status, user_id, updated_at)
 		VALUES ($1, $2, $3, $4)
 		`

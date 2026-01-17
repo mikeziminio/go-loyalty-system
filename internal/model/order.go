@@ -15,12 +15,14 @@ var (
 )
 
 var (
-	ErrInsufficientFunds = errors.New("insufficient funds")
+	ErrInsufficientFunds        = errors.New("insufficient funds")
+	ErrOrderAlreadyLoaded       = errors.New("order already loaded")
+	ErrOrderLoadedByAnotherUser = errors.New("order loaded by another user")
 )
 
 type Order struct {
 	ID         string
 	Status     OrderStatus
-	Accrual    int
+	Accrual    float64
 	UploadedAt time.Time
 }

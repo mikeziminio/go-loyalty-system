@@ -28,12 +28,12 @@ func NewClient(baseURL string) *Client {
 }
 
 type orderInfoResponse struct {
-	Id      string `json:"order"`
-	Status  string `json:"status"`
-	Accrual int    `json:"accrual"`
+	Id      string  `json:"order"`
+	Status  string  `json:"status"`
+	Accrual float64 `json:"accrual"`
 }
 
-func (c *Client) OrderInfo(ctx context.Context, id string) (*model.Order, error) {
+func (c *Client) Order(ctx context.Context, id string) (*model.Order, error) {
 	path := fmt.Sprintf("/api/orders/%s", id)
 	fullURL, err := url.JoinPath(c.baseURL, path)
 	if err != nil {
