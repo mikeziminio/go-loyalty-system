@@ -21,6 +21,10 @@ type UserRepository interface {
 	AddWithdrawal(ctx context.Context, userID int, orderID string, sum float64) error
 	Withdrawals(ctx context.Context, userID int) ([]model.Withdrawal, error)
 	AddOrder(ctx context.Context, userID int, orderID string) error
+	ProcessOrder(
+		ctx context.Context, userID int, orderID string,
+		accrual float64, status string,
+	) error
 	Orders(ctx context.Context, userID int) ([]model.Order, error)
 }
 

@@ -15,17 +15,18 @@ type Config struct {
 }
 
 var (
-	DefaultAddress  = "localhost:8080"
-	DefaultLogLevel = "info"
+	DefaultAddress        = "localhost:8080"
+	DefaultAccrualAddress = "http://localhost:8088"
+	DefaultLogLevel       = "info"
 )
 
 func NewFromEnvsAndFlags() (*Config, error) {
 	c := Config{}
 	c.LogLevel = DefaultLogLevel
 
-	flag.StringVar(&c.Address, "a", DefaultAddress, "хост:порт http сервера")
+	flag.StringVar(&c.Address, "a", DefaultAddress, "host:port http сервера")
 	flag.StringVar(&c.DatabaseURI, "d", "", "database URI")
-	flag.StringVar(&c.AccrualAddress, "r", "", "хост:порт системы расчёта начислений")
+	flag.StringVar(&c.AccrualAddress, "r", DefaultAccrualAddress, "http://host:port системы расчёта начислений")
 	flag.Parse()
 
 	// todo: исправить: переменные среды перезаписывают флаги
