@@ -18,7 +18,7 @@ tasks:
   run:
     desc: Run server
     cmds:
-      - $BIN/gophermart -a "localhost:8080" -r "http://localhost:8088"
+      - $BIN/gophermart -a "localhost:8080" -r "http://localhost:8088" -d "postgresql://postgres:postgres@localhost:5432/main?sslmode=disable"
 
   run-accrual:
     desc: Run accrual server
@@ -68,6 +68,11 @@ tasks:
     desc: Docker compose up postgres container
     cmds:
       - docker compose -f docker-compose-postgres.yml up -d
+
+  postgres-down:
+    desc: Docker compose up postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml down
 
   postgres-ps:
     desc: Docker compose status postgres container

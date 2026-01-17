@@ -27,11 +27,10 @@ func main() {
 		stdlog.Fatalf("failed to init config: %v", err)
 	}
 
-	connURL := "postgres://postgres:postgres@localhost:5432/main?sslmode=disable"
 	var minConns int32 = 2
 	var maxConns int32 = 10
 
-	d, err := db.NewDB(ctx, connURL, minConns, maxConns, logger)
+	d, err := db.NewDB(ctx, conf.DatabaseURI, minConns, maxConns, logger)
 	if err != nil {
 		logger.Fatal("failed to init db", zap.Error(err))
 	}
