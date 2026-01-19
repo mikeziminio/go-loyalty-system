@@ -1,0 +1,105 @@
+version: '3'
+
+env:
+  BIN: "{{.PWD}}/bin"
+
+tasks:
+
+  default:
+    cmds:
+      - "task -l"
+    silent: true
+
+  build:
+    desc: Build
+    cmds:
+      - "go build -o $BIN/gophermart ./cmd/gophermart"
+
+  run:
+    desc: Run server
+    cmds:
+      - $BIN/gophermart -a "localhost:8080" -r "http://localhost:8088" -d "postgresql://postgres:postgres@localhost:5432/main?sslmode=disable"
+
+  run-accrual:
+    desc: Run accrual server
+    cmds:
+      - ./cmd/accrual/accrual_darwin_amd64 -a "localhost:8088" -d "postgresql://postgres:postgres@localhost:5433/accrual?sslmode=disable"
+
+  test:
+    desc: Run local unit tests
+    cmds:
+      - "go test -v -race ./..."
+
+  lint-prepare:
+    desc: Install golangci-lint and nilaway, verify golangci-lint config
+    cmds:
+      - "GOBIN=$BIN go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0"
+      - "GOBIN=$BIN go install go.uber.org/nilaway/cmd/nilaway@latest"
+      - "$BIN/golangci-lint cache clean"
+      - "$BIN/golangci-lint config verify"
+
+  lint:
+    desc: Run linters
+    cmds:
+      - "$BIN/golangci-lint run -c .golangci.yml"
+      - "$BIN/nilaway -pretty-print=true ./..."
+
+  fmt:
+    desc: Format and fix imports
+    cmds:
+      - "gofmt -w ."
+      - "goimports -w -local \"github.com/mikeziminio/go-custom-metrics\" ."
+
+  build-yandex:
+    desc: Build yandex tests
+    cmds:
+      - git clone https://github.com/Yandex-Practicum/go-autotests.git ./tmp-go-autotests
+      - (cd ./tmp-go-autotests && go build -o ../bin/statictest ./cmd/statictest)
+      - (cd ./tmp-go-autotests && go build -o ../bin/random ./cmd/random)
+      - (cd ./tmp-go-autotests && go test -c -o ../bin/gophermarttest ./cmd/gophermarttest)
+      - rm -r -f ./tmp-go-autotests
+
+  test-yandex:
+    desc: Test with yandex tests
+    cmds:
+      - . ./test.sh
+
+  postgres-up:
+    desc: Docker compose up postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml up -d
+
+  postgres-down:
+    desc: Docker compose up postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml down --remove-orphans
+
+  postgres-ps:
+    desc: Docker compose status postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml ps
+
+  psql:
+    desc: Run psql inside main-postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml run -it main-postgres "psql" "postgres://postgres:postgres@main-postgres:5432/main?sslmode=disable"
+
+  psql-accrual:
+    desc: Run psql inside accrual-postgres container
+    cmds:
+      - docker compose -f docker-compose-postgres.yml run -it accrual-postgres "psql" "postgres://postgres:postgres@accrual-postgres:5432/accrual?sslmode=disable"
+
+  migrate-prepare:
+    desc: Install golang-migrate
+    cmds:
+      - "GOBIN=$BIN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest"
+
+  migrate-create:
+    desc: Create migration, specify name with -- name
+    cmds:
+      - "$BIN/migrate create -ext sql -dir ./migrations -seq {{.CLI_ARGS}}"
+
+  migrate-up:
+    desc: Run migrate up
+    cmds:
+      - "$BIN/migrate -database 'postgres://postgres:postgres@localhost:5432/main?sslmode=disable' -path ./migrations up"

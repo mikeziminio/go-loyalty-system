@@ -1,0 +1,373 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.uber.org/zap"
+
+	"github.com/mikeziminio/go-loyalty-system/internal/model"
+)
+
+type DB struct {
+	pool *pgxpool.Pool
+	log  *zap.Logger
+}
+
+func NewDB(ctx context.Context, connURL string, minConns int32, maxConns int32, log *zap.Logger) (*DB, error) {
+	poolConf, err := pgxpool.ParseConfig(connURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+	poolConf.MinConns = minConns
+	poolConf.MaxConns = maxConns
+	pool, err := pgxpool.NewWithConfig(ctx, poolConf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
+	}
+
+	err = migrateUp(connURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to migrate up: %w", err)
+	}
+
+	return &DB{
+		pool: pool,
+		log:  log,
+	}, nil
+}
+
+func migrateUp(connURL string) error {
+	// Для миграций - отдельное подключение
+	stddb, err := sql.Open("pgx", connURL)
+	if err != nil {
+		return fmt.Errorf("failed to create connection pool for migration: %w", err)
+	}
+	defer stddb.Close()
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return fmt.Errorf("failed to get current filename")
+	}
+	projectRoot := filepath.Join(filepath.Dir(filename), "..", "..")
+	migrationsPath := "file://" + filepath.Join(projectRoot, "migrations")
+
+	driver, err := postgres.WithInstance(stddb, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create driver: %w", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		migrationsPath, "postgres", driver,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", err)
+	}
+
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("failed to migrate up: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return db.pool.Begin(ctx)
+}
+
+func (db *DB) Close() {
+	db.pool.Close()
+}
+
+func (db *DB) fetchUserByLogin(ctx context.Context, login string) (*model.User, error) {
+	q := `SELECT * FROM users WHERE login = $1`
+	rows, err := db.pool.Query(ctx, q, login)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	u, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[user])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrUserNotFound
+		}
+		return nil, fmt.Errorf("unexpected error: %w", err)
+	}
+	return &model.User{
+		ID:        u.ID,
+		Login:     u.Login,
+		Password:  u.Password,
+		Token:     u.Token,
+		Balance:   u.Balance,
+		Withdrawn: u.Withdrawn,
+	}, nil
+}
+
+func (db *DB) fetchUserByID(ctx context.Context, id int) (*model.User, error) {
+	q := `SELECT * FROM users WHERE id = $1`
+	rows, err := db.pool.Query(ctx, q, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	u, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[user])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrUserNotFound
+		}
+		return nil, fmt.Errorf("unexpected error: %w", err)
+	}
+	return &model.User{
+		ID:        u.ID,
+		Login:     u.Login,
+		Password:  u.Password,
+		Token:     u.Token,
+		Balance:   u.Balance,
+		Withdrawn: u.Withdrawn,
+	}, nil
+}
+
+func (db *DB) fetchUserByToken(ctx context.Context, token string) (*model.User, error) {
+	q := `SELECT * FROM users WHERE token = $1`
+	rows, err := db.pool.Query(ctx, q, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	u, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[user])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrTokenNotFound
+		}
+		return nil, fmt.Errorf("unexpected error: %w", err)
+	}
+	return &model.User{
+		ID:        u.ID,
+		Login:     u.Login,
+		Password:  u.Password,
+		Token:     u.Token,
+		Balance:   u.Balance,
+		Withdrawn: u.Withdrawn,
+	}, nil
+}
+
+func (db *DB) Register(ctx context.Context, login string, password string) (*model.User, error) {
+	q := `SELECT COUNT(id) FROM users WHERE login = $1`
+	row := db.pool.QueryRow(ctx, q, login)
+	var count int
+	err := row.Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("unexpected error: %w", err) // model.ErrUserAlreadyExists
+	}
+	if count != 0 {
+		return nil, model.ErrUserAlreadyExists
+	}
+
+	uid, _ := uuid.NewUUID()
+	token := uid.String()
+
+	q = `
+		INSERT INTO users(login, password, token)
+		VALUES ($1, $2, $3)
+		RETURNING *
+		`
+	rows, err := db.pool.Query(ctx, q, login, password, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	u, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[user])
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect one row: %w", err)
+	}
+
+	return &model.User{
+		ID:       u.ID,
+		Login:    u.Login,
+		Password: u.Password,
+		Token:    u.Token,
+	}, nil
+}
+
+func (db *DB) AuthByLogin(ctx context.Context, login string, password string) (*model.User, error) {
+	u, err := db.fetchUserByLogin(ctx, login)
+	if err != nil {
+		return nil, err
+	}
+	if password != u.Password {
+		return nil, model.ErrWrongPassword
+	}
+
+	return u, nil
+}
+
+func (db *DB) AuthByToken(ctx context.Context, token string) (*model.User, error) {
+	u, err := db.fetchUserByToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (db *DB) AddWithdrawal(ctx context.Context, userID int, orderID string, sum float64) error {
+	u, err := db.fetchUserByID(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	if u.Balance < sum {
+		return model.ErrInsufficientFunds
+	}
+
+	q := `
+		UPDATE users
+		SET balance = balance - $1, withdrawn = withdrawn + $1
+		WHERE id = $2
+		`
+	t, err := db.pool.Exec(ctx, q, sum, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	if !t.Update() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to update user: %s", t.String())
+	}
+
+	q = `
+		INSERT INTO withdrawals(sum, order_id, user_id, processed_at)
+		VALUES ($1, $2, $3, $4)
+		`
+	t, err = db.pool.Exec(ctx, q, sum, orderID, userID, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to insert user: %w", err)
+	}
+	if !t.Insert() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to insert user: %s", t.String())
+	}
+	return nil
+}
+
+func (db *DB) Withdrawals(ctx context.Context, userID int) ([]model.Withdrawal, error) {
+	q := `
+		SELECT * FROM withdrawals
+		WHERE user_id = $1
+		ORDER BY processed_at DESC
+		`
+	rows, err := db.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	ws, err := pgx.CollectRows(rows, pgx.RowToStructByName[withdrawal])
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect one row: %w", err)
+	}
+
+	var withdrawals []model.Withdrawal
+	for _, w := range ws {
+		withdrawals = append(withdrawals, model.Withdrawal{
+			OrderID:     w.OrderID,
+			Sum:         w.Sum,
+			ProcessedAt: w.ProcessedAt,
+		})
+	}
+	return withdrawals, nil
+}
+
+func (db *DB) AddOrder(ctx context.Context, userID int, orderID string) error {
+	q := `SELECT * FROM orders WHERE id = $1`
+	rows, err := db.pool.Query(ctx, q, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to do query: %w", err)
+	}
+	o, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[order])
+	if !errors.Is(err, pgx.ErrNoRows) {
+		if err != nil {
+			return fmt.Errorf("failed to collect one row: %w", err)
+		}
+		if o.UserID == userID {
+			return model.ErrOrderAlreadyLoaded
+		}
+		return model.ErrOrderLoadedByAnotherUser
+	}
+
+	q = `
+		INSERT INTO orders(id, status, user_id, updated_at)
+		VALUES ($1, $2, $3, $4)
+		`
+	t, err := db.pool.Exec(ctx, q, orderID, "NEW", userID, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to insert order: %w", err)
+	}
+	if !t.Insert() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to insert order: %s", t.String())
+	}
+	return nil
+}
+
+// Обновляет заказ и увеличивает у пользователя баланс
+func (db *DB) ProcessOrder(
+	ctx context.Context, userID int, orderID string,
+	accrual float64, status string,
+) error {
+	// todo: объединить в транзакцию
+	q := `
+		UPDATE orders
+		SET status = $1, accrual = $2, updated_at = $3
+		WHERE id = $4
+		`
+	t, err := db.pool.Exec(ctx, q, status, accrual, time.Now(), orderID)
+	if err != nil {
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+	if !t.Update() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to update order: %s", t.String())
+	}
+
+	q = `
+		UPDATE users
+		SET balance = balance + $1
+		WHERE id = $2
+		`
+	t, err = db.pool.Exec(ctx, q, accrual, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	if !t.Update() || t.RowsAffected() != 1 {
+		return fmt.Errorf("failed to update user: %s", t.String())
+	}
+
+	return nil
+}
+
+func (db *DB) Orders(ctx context.Context, userID int) ([]model.Order, error) {
+	q := `
+		SELECT * FROM orders
+		WHERE user_id = $1
+		ORDER BY updated_at DESC
+		`
+	rows, err := db.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to do query: %w", err)
+	}
+	os, err := pgx.CollectRows(rows, pgx.RowToStructByName[order])
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect one row: %w", err)
+	}
+
+	var orders []model.Order
+	for _, o := range os {
+		orders = append(orders, model.Order{
+			ID:         o.ID,
+			Status:     model.OrderStatus(o.Status),
+			Accrual:    o.Accrual,
+			UploadedAt: o.UpdatedAt,
+		})
+	}
+	return orders, nil
+}
